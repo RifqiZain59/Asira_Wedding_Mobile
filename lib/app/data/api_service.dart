@@ -2,12 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  // =======================================================================
-  // KONFIGURASI KONEKSI
-  // [PERBAIKAN]:
-  // 1. Hapus spasi di depan 'https'
-  // 2. Pastikan path '/api/mobile' ada di akhir
-  // =======================================================================
+  // GANTI URL INI DENGAN URL NGROK/HOSTING ANDA
   static const String baseUrl =
       'https://undepraved-jaiden-nonflexibly.ngrok-free.dev/api/mobile';
 
@@ -17,7 +12,7 @@ class ApiService {
     'ngrok-skip-browser-warning': 'true',
   };
 
-  // --- 1. Login Crew ---
+  // 1. LOGIN CREW
   Future<Map<String, dynamic>> loginCrew(String kodeAkses) async {
     try {
       final response = await http.post(
@@ -31,13 +26,11 @@ class ApiService {
     }
   }
 
-  // --- 2. Login Phone ---
+  // 2. LOGIN PHONE
   Future<Map<String, dynamic>> loginByPhone(String phoneNumber) async {
     try {
-      final url = Uri.parse('$baseUrl/login-phone');
-      print("Mencoba login ke: $url");
       final response = await http.post(
-        url,
+        Uri.parse('$baseUrl/login-phone'),
         headers: _headers,
         body: jsonEncode({'phone_number': phoneNumber}),
       );
@@ -47,12 +40,12 @@ class ApiService {
     }
   }
 
-  // --- 3. Rundown (Ini yang bikin Error 404 jika Endpoint di Python tidak ada) ---
+  // 3. GET RUNDOWN
   Future<List<dynamic>> getRundown() async {
     return await _getListData('$baseUrl/rundown');
   }
 
-  // --- 4. Dashboard Stats ---
+  // 4. DASHBOARD & STATUS DARURAT
   Future<Map<String, dynamic>> getDashboardStats() async {
     try {
       final response = await http.get(
@@ -61,52 +54,53 @@ class ApiService {
       );
       return _processResponse(response);
     } catch (e) {
-      return {'status': 'error', 'message': 'Gagal memuat dashboard: $e'};
+      return {'status': 'error', 'message': '$e'};
     }
   }
 
-  // --- Helper Internal ---
+  // 5. STOP EMERGENCY (Matikan Alarm)
+  Future<bool> stopEmergency() async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/emergency/stop'),
+        headers: _headers,
+      );
+      final data = _processResponse(response);
+      return data['status'] == 'success';
+    } catch (e) {
+      print("Error stopping emergency: $e");
+      return false;
+    }
+  }
+
+  // HELPER
   Future<List<dynamic>> _getListData(String url) async {
     try {
-      print("Fetching list from: $url");
       final response = await http.get(Uri.parse(url), headers: _headers);
-
-      if (response.body.trim().startsWith("<")) {
-        print("HTML Response (Error 404/500): ${response.body}");
-        return [];
-      }
-
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);
-        if (json is Map<String, dynamic> && json['status'] == 'success') {
+        if (json is Map && json['status'] == 'success') {
           return json['data'] ?? [];
         }
       }
       return [];
     } catch (e) {
-      print("Error fetching list: $e");
       return [];
     }
   }
 
   Map<String, dynamic> _processResponse(http.Response response) {
     if (response.body.isEmpty || response.body.trim().startsWith("<")) {
-      return {
-        'status': 'error',
-        'message': 'Server Error (Code: ${response.statusCode})',
-      };
+      return {'status': 'error', 'message': 'Server Error / HTML Response'};
     }
     try {
       final data = jsonDecode(response.body);
-      if (response.statusCode >= 400 && data['status'] != 'error') {
-        return {
-          'status': 'error',
-          'message': data['message'] ?? 'Terjadi kesalahan',
-        };
+      if (response.statusCode >= 400) {
+        return {'status': 'error', 'message': data['message'] ?? 'Error'};
       }
       return data;
     } catch (e) {
-      return {'status': 'error', 'message': 'Format respon tidak valid: $e'};
+      return {'status': 'error', 'message': 'Format salah: $e'};
     }
   }
 }

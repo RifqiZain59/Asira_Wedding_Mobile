@@ -6,13 +6,15 @@ import 'package:get/get.dart';
 class HomeController extends GetxController {
   final ApiService _apiService = ApiService();
 
-  // State
+  // State Rundown
   var isLoading = false.obs;
   var selectedRundownType = 'pagi'.obs;
-
-  // List Data
   var akadRundownList = <Map<String, dynamic>>[].obs;
   var resepsiRundownList = <Map<String, dynamic>>[].obs;
+
+  // State Darurat
+  var isEmergency = false.obs;
+  var emergencyMessage = ''.obs;
 
   Timer? _timer;
 
@@ -20,6 +22,7 @@ class HomeController extends GetxController {
   void onInit() {
     super.onInit();
     fetchRundownData(isBackground: false);
+    checkEmergencyStatus();
     startAutoRefresh();
   }
 
@@ -30,9 +33,50 @@ class HomeController extends GetxController {
   }
 
   void startAutoRefresh() {
+    // Refresh data setiap 5 detik
     _timer = Timer.periodic(const Duration(seconds: 5), (timer) {
       fetchRundownData(isBackground: true);
+      checkEmergencyStatus();
     });
+  }
+
+  // --- CEK STATUS DARI DASHBOARD ---
+  void checkEmergencyStatus() async {
+    try {
+      var response = await _apiService.getDashboardStats();
+
+      if (response['status'] == 'success') {
+        var data = response['data'];
+
+        bool newStatus = data['is_emergency'] ?? false;
+        String newMsg = data['emergency_message'] ?? '';
+
+        // Update state reactive
+        isEmergency.value = newStatus;
+        emergencyMessage.value = newMsg;
+      }
+    } catch (e) {
+      print("Error checking emergency: $e");
+    }
+  }
+
+  // --- MATIKAN DARURAT (AKSI USER) ---
+  Future<void> stopEmergencySignal() async {
+    bool success = await _apiService.stopEmergency();
+    if (success) {
+      isEmergency.value = false;
+      emergencyMessage.value = '';
+      Get.snackbar(
+        "Aman",
+        "Mode Darurat telah dimatikan.",
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+        snackPosition: SnackPosition.BOTTOM,
+        margin: const EdgeInsets.all(20),
+      );
+    } else {
+      Get.snackbar("Gagal", "Gagal menghubungi server.");
+    }
   }
 
   void fetchRundownData({bool isBackground = false}) async {
@@ -96,9 +140,7 @@ class HomeController extends GetxController {
         title.contains('makeup') ||
         title.contains('persiapan'))
       return Icons.palette;
-    if (title.contains('akad') ||
-        title.contains('janji') ||
-        title.contains('pemberkatan'))
+    if (title.contains('akad') || title.contains('janji'))
       return Icons.favorite_border;
     if (title.contains('tamu') || title.contains('salaman'))
       return Icons.people_alt_outlined;

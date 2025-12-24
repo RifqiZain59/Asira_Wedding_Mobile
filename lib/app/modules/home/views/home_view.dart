@@ -4,26 +4,6 @@ import 'package:flutter/services.dart';
 import 'dart:async';
 import 'package:get/get.dart';
 
-// Data dummy tugas
-final List<Map<String, dynamic>> initialUrgentTasks = [
-  {
-    'type': 'Emergency',
-    'title': 'Konfirmasi Final Jumlah Tamu',
-    'description': 'Batas waktu hari ini jam 17:00 untuk katering.',
-    'icon': Icons.gpp_bad_rounded,
-    'color': Colors.red.shade700,
-    'isCompleted': false,
-  },
-  {
-    'type': 'Warning',
-    'title': 'Pelunasan Vendor Dekorasi',
-    'description': 'Pembayaran jatuh tempo besok pagi. Segera transfer!',
-    'icon': Icons.schedule,
-    'color': Colors.amber.shade700,
-    'isCompleted': false,
-  },
-];
-
 class HomeView extends StatefulWidget {
   const HomeView({super.key});
 
@@ -32,12 +12,13 @@ class HomeView extends StatefulWidget {
 }
 
 class _HomeViewState extends State<HomeView> {
-  final HomeController controller = Get.put(HomeController());
+  final HomeController controller = Get.find<HomeController>();
   final Color primaryTeal = const Color(0xFF00BFA5);
 
   late DateTime _currentTime;
   late Timer _timer;
-  late List<Map<String, dynamic>> _urgentTasks;
+
+  // State lokal untuk getaran
   bool _isVibrating = false;
 
   final List<String> _days = [
@@ -67,14 +48,23 @@ class _HomeViewState extends State<HomeView> {
   @override
   void initState() {
     super.initState();
-    _urgentTasks = initialUrgentTasks
-        .map((task) => Map<String, dynamic>.from(task))
-        .toList();
     _currentTime = DateTime.now();
     _timer = Timer.periodic(const Duration(seconds: 1), _updateTime);
 
+    // Listener: Jika Controller mendeteksi SOS (dari server), picu getaran
+    ever(controller.isEmergency, (bool isEmergency) {
+      if (isEmergency) {
+        _triggerHapticFeedback();
+      } else {
+        _stopHapticFeedback();
+      }
+    });
+
+    // Cek kondisi awal saat aplikasi dibuka
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _triggerHapticFeedback();
+      if (controller.isEmergency.value) {
+        _triggerHapticFeedback();
+      }
     });
   }
 
@@ -88,12 +78,12 @@ class _HomeViewState extends State<HomeView> {
     super.dispose();
   }
 
+  // --- LOGIKA GETARAN (HAPTIC) ---
   void _stopHapticFeedback() {
     if (_isVibrating) {
       if (mounted) {
         setState(() {
           _isVibrating = false;
-          if (_urgentTasks.isNotEmpty) _urgentTasks[0]['isCompleted'] = true;
         });
       }
       HapticFeedback.vibrate();
@@ -101,52 +91,30 @@ class _HomeViewState extends State<HomeView> {
   }
 
   void _triggerHapticFeedback() async {
-    if (_urgentTasks.isEmpty || (_urgentTasks[0]['isCompleted'] as bool))
-      return;
-    final Map<String, dynamic> currentTask = _urgentTasks[0];
-    final Color taskColor = currentTask['color'] as Color;
+    if (_isVibrating) return;
 
-    await Future.delayed(const Duration(milliseconds: 100));
     if (mounted) setState(() => _isVibrating = true);
 
-    int repeatCount = 0;
-    const Duration minimalDelay = Duration(milliseconds: 50);
-    const int veryLongDurationInRepeats = 50000;
+    const Duration minimalDelay = Duration(milliseconds: 500);
 
-    if (taskColor == Colors.red.shade700) {
-      repeatCount = veryLongDurationInRepeats;
-      for (int i = 0; i < repeatCount && _isVibrating; i++) {
-        try {
-          await HapticFeedback.heavyImpact();
-        } catch (e) {
-          HapticFeedback.vibrate();
-        }
-        if (_isVibrating) await Future.delayed(minimalDelay);
-      }
-    } else if (taskColor == Colors.amber.shade700) {
-      repeatCount = veryLongDurationInRepeats ~/ 2;
-      for (int i = 0; i < repeatCount && _isVibrating; i++) {
-        try {
-          await HapticFeedback.mediumImpact();
-        } catch (e) {
-          HapticFeedback.vibrate();
-        }
-        if (_isVibrating) await Future.delayed(minimalDelay);
-      }
-    } else {
-      HapticFeedback.lightImpact();
-    }
+    while (_isVibrating && mounted) {
+      await HapticFeedback.heavyImpact();
+      await Future.delayed(const Duration(milliseconds: 100));
+      await HapticFeedback.heavyImpact();
+      await Future.delayed(const Duration(milliseconds: 100));
+      await HapticFeedback.heavyImpact();
 
-    if (mounted) {
-      setState(() {
-        _isVibrating = false;
-        if (_urgentTasks.isNotEmpty &&
-            !(_urgentTasks[0]['isCompleted'] as bool)) {
-          _urgentTasks[0]['isCompleted'] = true;
-        }
-      });
+      await Future.delayed(minimalDelay);
+
+      // Jika status di controller sudah false (dimatikan admin lain), stop getar
+      if (!controller.isEmergency.value) {
+        _stopHapticFeedback();
+        break;
+      }
     }
   }
+
+  // --- UI COMPONENTS ---
 
   Widget _buildCurrentTimeCard() {
     final now = _currentTime;
@@ -304,22 +272,40 @@ class _HomeViewState extends State<HomeView> {
     );
   }
 
+  // [UPDATED] Tombol OK sekarang mematikan Alarm ke Server
   Widget _buildOkButton() {
     return GestureDetector(
-      onTap: _stopHapticFeedback,
+      onTap: () async {
+        // 1. Matikan getar lokal dulu agar user tenang
+        _stopHapticFeedback();
+        // 2. Panggil API untuk mematikan status darurat di server (Admin)
+        await controller.stopEmergencySignal();
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
         decoration: BoxDecoration(
-          color: Colors.green.shade600,
+          color: Colors.white,
           borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.red.shade200),
         ),
-        child: const Text(
-          'OK / Selesai',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.stop_circle_outlined,
+              color: Colors.red.shade700,
+              size: 18,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Matikan Alarm & Lapor Aman',
+              style: TextStyle(
+                color: Colors.red.shade700,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -327,14 +313,16 @@ class _HomeViewState extends State<HomeView> {
 
   Widget _buildTaskItem(Map<String, dynamic> task) {
     final Color color = task['color'] as Color;
-    final bool isCompleted = task['isCompleted'] as bool;
+    final bool isEmergency = task['type'] == 'Emergency';
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isCompleted ? Colors.grey.shade200 : color.withOpacity(0.1),
+        color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: isCompleted ? Colors.grey.shade400 : color.withOpacity(0.5),
+          color: color.withOpacity(0.5),
+          width: isEmergency ? 2.0 : 1.0,
         ),
       ),
       child: Column(
@@ -342,33 +330,45 @@ class _HomeViewState extends State<HomeView> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                isCompleted ? Icons.check_circle : task['icon'] as IconData,
-                color: isCompleted ? Colors.green : color,
-                size: 24,
-              ),
+              // Ikon berdenyut jika SOS
+              isEmergency
+                  ? TweenAnimationBuilder(
+                      tween: Tween<double>(begin: 1.0, end: 1.2),
+                      duration: const Duration(milliseconds: 500),
+                      builder: (context, scale, child) {
+                        return Transform.scale(scale: scale, child: child);
+                      },
+                      child: Icon(
+                        Icons.warning_amber_rounded,
+                        color: color,
+                        size: 30,
+                      ),
+                    )
+                  : Icon(task['icon'], color: color, size: 24),
+
               const SizedBox(width: 10),
+
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      task['title'] as String,
+                      task['title'],
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: isCompleted ? Colors.black54 : color,
-                        fontSize: 14,
-                        decoration: isCompleted
-                            ? TextDecoration.lineThrough
-                            : null,
+                        color: color,
+                        fontSize: isEmergency ? 16 : 14,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      task['description'] as String,
+                      task['description'],
                       style: TextStyle(
-                        color: isCompleted ? Colors.black38 : Colors.black54,
-                        fontSize: 12,
+                        color: Colors.black87,
+                        fontSize: 13,
+                        fontWeight: isEmergency
+                            ? FontWeight.w500
+                            : FontWeight.normal,
                       ),
                     ),
                   ],
@@ -376,7 +376,8 @@ class _HomeViewState extends State<HomeView> {
               ),
             ],
           ),
-          if (_isVibrating && !isCompleted) ...[
+
+          if (_isVibrating && isEmergency) ...[
             const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
@@ -389,39 +390,79 @@ class _HomeViewState extends State<HomeView> {
   }
 
   Widget _buildUrgentTaskCard() {
-    if (_urgentTasks.isEmpty) return const SizedBox.shrink();
-    final Map<String, dynamic> currentTask = _urgentTasks[0];
-    return Container(
-      margin: const EdgeInsets.only(left: 20, right: 20, top: 5, bottom: 5),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 5,
-            blurRadius: 7,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Tugas Mendesak',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
+    return Obx(() {
+      Map<String, dynamic> currentTask;
+      String headerTitle;
+      Color cardColor;
+      Color textColor;
+
+      if (controller.isEmergency.value) {
+        // --- TAMPILAN SOS / DARURAT ---
+        headerTitle = "⚠️ STATUS DARURAT ⚠️";
+        cardColor = Colors.red.shade50;
+        textColor = Colors.red.shade800;
+
+        currentTask = {
+          'type': 'Emergency',
+          'title': 'SOS / PERINGATAN',
+          'description': controller.emergencyMessage.value.isNotEmpty
+              ? controller.emergencyMessage.value
+              : "Terjadi kondisi darurat. Segera berkumpul.",
+          'icon': Icons.warning_amber_rounded,
+          'color': Colors.red.shade700,
+        };
+      } else {
+        // --- TAMPILAN AMAN (NORMAL) ---
+        headerTitle = "Status Keamanan";
+        cardColor = Colors.white;
+        textColor = Colors.green.shade800;
+
+        currentTask = {
+          'type': 'Safe',
+          'title': 'Tidak Ada Darurat',
+          'description': 'Situasi saat ini aman terkendali.',
+          'icon': Icons.verified_user_rounded,
+          'color': Colors.green.shade600,
+        };
+      }
+
+      return Container(
+        margin: const EdgeInsets.only(left: 20, right: 20, top: 5, bottom: 5),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(20),
+          border: controller.isEmergency.value
+              ? Border.all(color: Colors.red.shade200)
+              : Border.all(color: Colors.green.shade100),
+          boxShadow: [
+            BoxShadow(
+              color: controller.isEmergency.value
+                  ? Colors.red.withOpacity(0.2)
+                  : Colors.green.withOpacity(0.05),
+              spreadRadius: 5,
+              blurRadius: 7,
+              offset: const Offset(0, 3),
             ),
-          ),
-          const SizedBox(height: 15),
-          _buildTaskItem(currentTask),
-        ],
-      ),
-    );
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              headerTitle,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: textColor,
+              ),
+            ),
+            const SizedBox(height: 15),
+            _buildTaskItem(currentTask),
+          ],
+        ),
+      );
+    });
   }
 
   Widget _buildRundownSelector() {
@@ -469,10 +510,7 @@ class _HomeViewState extends State<HomeView> {
 
   Widget _buildRundownItem(Map<String, dynamic> item, int index) {
     final bool isLiveEvent = (item['status'] ?? '') == 'Live';
-
     Color timeColor = isLiveEvent ? primaryTeal : Colors.black;
-    const Color activityTitleColor = Colors.black;
-    const Color iconAndDetailColor = Colors.black;
 
     Widget rowContent = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -507,7 +545,6 @@ class _HomeViewState extends State<HomeView> {
                       color: Colors.white,
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
                     ),
                   ),
                 )
@@ -526,9 +563,8 @@ class _HomeViewState extends State<HomeView> {
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
-                  color: activityTitleColor,
+                  color: Colors.black,
                 ),
-                overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 4),
               Container(
@@ -543,23 +579,17 @@ class _HomeViewState extends State<HomeView> {
                     Icon(
                       item['icon'] as IconData,
                       size: 14,
-                      color: iconAndDetailColor,
+                      color: Colors.black,
                     ),
                     const SizedBox(width: 8),
-                    // ============================================
-                    // [PERBAIKAN] Bagian Deskripsi Agar Tidak Terpotong
-                    // ============================================
                     Expanded(
                       child: Text(
                         item['detail'] as String,
                         style: const TextStyle(
                           fontSize: 13,
-                          color: iconAndDetailColor,
+                          color: Colors.black,
                         ),
-                        overflow: TextOverflow
-                            .visible, // Biarkan terlihat semua (wrap)
-                        // atau gunakan marquee jika pakai package
-                        maxLines: 2, // Batasi 2 baris agar rapi
+                        overflow: TextOverflow.visible,
                       ),
                     ),
                   ],
@@ -613,11 +643,7 @@ class _HomeViewState extends State<HomeView> {
             children: [
               const Text(
                 'Rundown Acara',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               IconButton(
                 icon: const Icon(Icons.refresh, size: 20, color: Colors.grey),
@@ -629,18 +655,19 @@ class _HomeViewState extends State<HomeView> {
           _buildRundownSelector(),
           const SizedBox(height: 15),
           Obx(() {
-            if (controller.isLoading.value)
+            if (controller.isLoading.value) {
               return const Center(
                 child: Padding(
                   padding: EdgeInsets.all(20.0),
                   child: CircularProgressIndicator(),
                 ),
               );
+            }
             final List<Map<String, dynamic>> currentRundown =
                 controller.selectedRundownType.value == 'pagi'
                 ? controller.akadRundownList
                 : controller.resepsiRundownList;
-            if (currentRundown.isEmpty)
+            if (currentRundown.isEmpty) {
               return const Padding(
                 padding: EdgeInsets.all(30.0),
                 child: Center(
@@ -650,6 +677,7 @@ class _HomeViewState extends State<HomeView> {
                   ),
                 ),
               );
+            }
             return Column(
               children: List.generate(
                 currentRundown.length,
@@ -678,7 +706,7 @@ class _HomeViewState extends State<HomeView> {
               children: <Widget>[
                 _buildHeader(),
                 _buildCurrentTimeCard(),
-                if (_urgentTasks.isNotEmpty) _buildUrgentTaskCard(),
+                _buildUrgentTaskCard(),
                 _buildRundownSection(),
                 const SizedBox(height: 10),
               ],
