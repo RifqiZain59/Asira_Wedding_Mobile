@@ -35,6 +35,7 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   get: ^4.7.3
+  http: ^1.6.0
 
 dev_dependencies:
   flutter_test:
@@ -46,10 +47,27 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^5.0.0
+  # PENTING: flutter_launcher_icons adalah dev_dependency, hanya versi yang dicantumkan di sini.
+  flutter_launcher_icons: "^0.13.1" 
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
+# =========================================================================
+# 🔥 BLOK KONFIGURASI PAKET (Dipindahkan ke root - SEJAJAR DENGAN 'name:')
+# =========================================================================
+
+# Konfigurasi Ikon Aplikasi (App Icon)
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/logo asira.png" # GANTI dengan path logo Anda
+  min_sdk_android: 21 # Atau versi terendah yang Anda dukung
+  remove_alpha_ios: true # Opsional, untuk menghilangkan transparansi di iOS
+
+# =========================================================================
+# BLOK FLUTTER
+# =========================================================================
 # The following section is specific to Flutter packages.
 flutter:
 
@@ -58,10 +76,9 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  # To add assets to your application, add an assets section, like this:
-  # assets:
-  #   - images/a_dot_burr.jpeg
-  #   - images/a_dot_ham.jpeg
+  assets:
+    - assets/logo asira.png
+    - assets/logo asira 2.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
