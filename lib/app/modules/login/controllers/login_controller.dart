@@ -1,179 +1,218 @@
 import 'package:asira/app/data/api_service.dart';
-import 'package:asira/app/modules/verifikasi_kode/views/verifikasi_kode_view.dart'; // Pastikan import ini ada
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 class LoginController extends GetxController {
-  // 1. Text Controller
+  // Text Controllers
   final phoneC = TextEditingController();
+  final codeC = TextEditingController();
 
-  // 2. State Loading
+  // State Variables
   var isLoading = false.obs;
+  var isCodeVisible = false.obs;
+  var userName = ''.obs;
 
-  // 3. Instance Service
   final ApiService _apiService = ApiService();
-
-  // Warna Brand
   final Color primaryGold = const Color(0xFFEFBF04);
 
   @override
   void onClose() {
     phoneC.dispose();
+    codeC.dispose();
     super.onClose();
   }
 
-  // --- Fungsi Validasi & Login ---
-  Future<void> login() async {
-    // A. Validasi Input
-    String rawInput = phoneC.text.trim();
+  // --- Fungsi Utama Tombol ---
+  Future<void> onMainButtonPressed() async {
+    if (isCodeVisible.value) {
+      await _verifyCodeAndLogin();
+    } else {
+      await _checkPhone();
+    }
+  }
 
-    if (rawInput.isEmpty) {
+  // --- Langkah 1: Cek Nomor HP ---
+  Future<void> _checkPhone() async {
+    String phoneInput = phoneC.text.trim();
+
+    if (phoneInput.isEmpty) {
       Get.snackbar(
-        'Error',
-        'Nomor HP tidak boleh kosong',
-        backgroundColor: Colors.redAccent,
+        'Perhatian',
+        'Nomor HP wajib diisi',
+        backgroundColor: Colors.orange,
         colorText: Colors.white,
       );
       return;
     }
 
-    String cleanNumber = rawInput.replaceAll(RegExp(r'\D'), '');
-
-    if (cleanNumber.length < 9) {
-      Get.snackbar(
-        'Error',
-        'Nomor HP terlalu pendek (min 9 digit)',
-        backgroundColor: Colors.redAccent,
-        colorText: Colors.white,
-      );
-      return;
-    }
-
-    if (cleanNumber.startsWith('0')) {
-      cleanNumber = cleanNumber.substring(1);
-    }
-
-    String finalPhoneNumber = "62$cleanNumber";
-
-    // B. Proses Login API
     isLoading.value = true;
 
     try {
-      // --- SIMULASI RESPON API ---
-      await Future.delayed(const Duration(seconds: 2));
-      final response = {
-        'status': finalPhoneNumber == '6281234567890' ? 'not_found' : 'success',
-        'message': finalPhoneNumber == '6281234567890'
-            ? 'User belum terdaftar'
-            : 'Login Berhasil',
-      };
-      // ---------------------------
+      String cleanNumber = phoneInput.replaceAll(RegExp(r'\D'), '');
 
-      // C. Cek Respon
+      final response = await _apiService.loginByPhone(cleanNumber);
+
       if (response['status'] == 'success') {
-        // KASUS 1: SUKSES LOGIN
-        // Pop Up dihapus, langsung pindah halaman
-        Get.to(() => const VerifikasiKodeView());
+        // [BERHASIL] Tampilkan Input Kode
+        isCodeVisible.value = true;
+        if (response['data'] != null) {
+          userName.value = response['data']['nama'] ?? '';
+        }
       } else if (response['status'] == 'not_found') {
-        // KASUS 2: BELUM TERDAFTAR (Pop Up ini tetap ada)
-        await _showUnregisteredDialog(finalPhoneNumber);
+        // [GAGAL] Pop Up Nomor Salah
+        _showErrorDialog(
+          title: "Nomor Tidak Dikenal",
+          message:
+              "Nomor ini belum terdaftar di sistem undangan kami. Pastikan nomor sudah benar.",
+        );
       } else {
-        // KASUS 3: ERROR LAINNYA
-        Get.snackbar(
-          'Gagal',
-          response['message'] ?? 'Login Gagal',
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
+        // Error lain
+        _showErrorDialog(
+          title: "Gagal Memuat",
+          message: response['message'] ?? "Terjadi kesalahan sistem.",
         );
       }
     } catch (e) {
-      Get.snackbar(
-        'Error',
-        'Terjadi kesalahan: $e',
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
+      _showErrorDialog(title: "Error Koneksi", message: "Gagal terhubung: $e");
     } finally {
       isLoading.value = false;
     }
   }
 
-  // --- Dialog Belum Terdaftar (Tetap Ada) ---
-  Future<void> _showUnregisteredDialog(String phone) async {
-    await Get.dialog(
-      AlertDialog(
+  // --- Langkah 2: Verifikasi Kode & Masuk ---
+  Future<void> _verifyCodeAndLogin() async {
+    String codeInput = codeC.text.trim();
+
+    if (codeInput.isEmpty) {
+      Get.snackbar(
+        'Perhatian',
+        'Kode akses tidak boleh kosong',
+        backgroundColor: Colors.orange,
+        colorText: Colors.white,
+      );
+      return;
+    }
+
+    isLoading.value = true;
+
+    try {
+      final response = await _apiService.loginCrew(codeInput);
+
+      if (response['status'] == 'success') {
+        // [SUKSES LOGIN]
+        Get.offAllNamed('/home');
+        Get.snackbar(
+          'Login Berhasil',
+          'Selamat datang ${userName.value}!',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+          snackPosition: SnackPosition.TOP,
+          margin: const EdgeInsets.all(20),
+          borderRadius: 20,
+        );
+      } else {
+        // [GAGAL KODE] Pop Up Kode Salah (Pengganti Navbar/Snackbar)
+        _showErrorDialog(
+          title: "Kode Akses Salah",
+          message:
+              "Kode yang Anda masukkan tidak cocok. Silakan periksa kembali.",
+        );
+      }
+    } catch (e) {
+      _showErrorDialog(title: "Error", message: "Gagal verifikasi: $e");
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  // Reset jika ingin ganti nomor
+  void resetState() {
+    isCodeVisible.value = false;
+    codeC.clear();
+    userName.value = '';
+  }
+
+  // =======================================================
+  // CUSTOM POP UP (DIALOG) YANG LEBIH BAGUS
+  // =======================================================
+  void _showErrorDialog({required String title, required String message}) {
+    Get.dialog(
+      Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        contentPadding: const EdgeInsets.all(25),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(15),
-              decoration: BoxDecoration(
-                color: Colors.orange.shade50,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.person_add_alt_1_rounded,
-                color: Colors.orange,
-                size: 50,
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Nomor Belum Terdaftar',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'Nomor +$phone belum terdaftar di sistem kami. Apakah Anda ingin mendaftar?',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.grey),
-            ),
-            const SizedBox(height: 25),
-
-            // Tombol Daftar
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryGold,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+        elevation: 10,
+        backgroundColor: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Ikon Error Keren
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  shape: BoxShape.circle,
                 ),
-                onPressed: () {
-                  Get.back(); // Tutup dialog
-                  Get.snackbar("Info", "Arahkan ke halaman Register disini");
-                },
-                child: const Text(
-                  'Daftar Sekarang',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
+                child: Icon(
+                  Icons.close_rounded,
+                  color: Colors.red.shade400,
+                  size: 40,
                 ),
               ),
-            ),
-            const SizedBox(height: 10),
+              const SizedBox(height: 20),
 
-            // Tombol Batal
-            TextButton(
-              onPressed: () => Get.back(),
-              child: Text(
-                'Batal',
+              // Judul
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Pesan
+              Text(
+                message,
+                textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.grey.shade600,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 15,
+                  height: 1.4,
                 ),
               ),
-            ),
-          ],
+              const SizedBox(height: 24),
+
+              // Tombol Tutup
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryGold,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    elevation: 0,
+                  ),
+                  onPressed: () => Get.back(), // Tutup Dialog
+                  child: const Text(
+                    "Coba Lagi",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-      barrierDismissible: true,
+      barrierDismissible: false, // User wajib klik tombol untuk tutup
     );
   }
 }

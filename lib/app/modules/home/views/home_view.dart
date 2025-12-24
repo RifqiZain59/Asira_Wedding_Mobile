@@ -1,119 +1,28 @@
+import 'package:asira/app/modules/home/controllers/home_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
-// Asumsi path ke LoginView yang sudah kita buat sebelumnya
-// import 'package:asira/app/modules/login/views/login_view.dart'; // Sudah tidak digunakan lagi
+import 'package:get/get.dart';
 
-// =============================================================================
-// 🔥 DATA DUMMY (Global Scope yang TIDAK BERUBAH)
-// =============================================================================
-
-// Data untuk Akad Nikah / Pagi
-final List<Map<String, dynamic>> akadRundown = [
-  {
-    'time': '07:00',
-    'activity': 'Persiapan & Rias Pengantin',
-    'detail': 'Lokasi: Bridal Suite A',
-    'icon': Icons.access_time_filled,
-  },
-  {
-    'time': '08:00',
-    'activity': 'Sesi Foto Keluarga Inti',
-    'detail': 'Fotografer & EO memastikan semua sudah hadir.',
-    'icon': Icons.camera_alt_outlined,
-  },
-  {
-    'time': '09:00',
-    'activity': 'Upacara Pemberkatan / Ijab Kabul',
-    'detail': 'Pembacaan janji suci dan penukaran cincin.',
-    'icon': Icons.church,
-  },
-  {
-    'time': '11:00',
-    'activity': 'Resepsi Sesi Siang',
-    'detail': 'Penyambutan tamu & jamuan makan siang.',
-    'icon': Icons.people_alt_outlined,
-  },
-];
-
-// Data untuk Resepsi / Malam
-final List<Map<String, dynamic>> resepsiRundown = [
-  {
-    'time': '18:0:0',
-    'activity': 'Persiapan & Touch-up (Makeup)',
-    'detail': 'Lokasi: Ruang Ganti VIP',
-    'icon': Icons.palette,
-  },
-  {
-    'time': '19:00',
-    'activity': 'Pembukaan Pintu Resepsi Malam',
-    'detail': 'Tamu mulai memasuki Grand Ballroom.',
-    'icon': Icons.door_front_door,
-  },
-  {
-    'time': '19:30',
-    'activity': 'Prosesi Masuk Pengantin',
-    'detail': 'Diiringi alunan musik orkestra.',
-    'icon': Icons.favorite_border,
-  },
-  {
-    'time': '21:00',
-    'activity': 'Penutup dan Foto Bersama',
-    'detail': 'Sesi terakhir dengan sahabat dan kolega.',
-    'icon': Icons.camera_alt_outlined,
-  },
-];
-
-// Data dummy untuk daftar Tugas Mendesak (BASE DATA)
+// Data dummy tugas
 final List<Map<String, dynamic>> initialUrgentTasks = [
   {
     'type': 'Emergency',
     'title': 'Konfirmasi Final Jumlah Tamu',
     'description': 'Batas waktu hari ini jam 17:00 untuk katering.',
     'icon': Icons.gpp_bad_rounded,
-    'color': Colors.red.shade700, // MERAH
-    'isCompleted': false, // Status Awal
+    'color': Colors.red.shade700,
+    'isCompleted': false,
   },
   {
     'type': 'Warning',
     'title': 'Pelunasan Vendor Dekorasi',
     'description': 'Pembayaran jatuh tempo besok pagi. Segera transfer!',
     'icon': Icons.schedule,
-    'color': Colors.amber.shade700, // KUNING (Amber)
-    'isCompleted': false, // Status Awal
+    'color': Colors.amber.shade700,
+    'isCompleted': false,
   },
 ];
-
-// =============================================================================
-// KLAS UTAMA
-// =============================================================================
-
-void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-  runApp(const MyApp());
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Wedding Planner UI Clone',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSwatch(primarySwatch: Colors.cyan)
-            .copyWith(
-              primary: const Color(0xFF00BFA5), // Menggunakan primaryTeal
-              secondary: Colors.tealAccent,
-            ),
-        useMaterial3: true,
-        canvasColor: Colors.white,
-      ),
-      home: const HomeView(),
-    );
-  }
-}
 
 class HomeView extends StatefulWidget {
   const HomeView({super.key});
@@ -123,21 +32,14 @@ class HomeView extends StatefulWidget {
 }
 
 class _HomeViewState extends State<HomeView> {
+  final HomeController controller = Get.put(HomeController());
   final Color primaryTeal = const Color(0xFF00BFA5);
 
-  String _selectedRundownType = 'pagi'; // Nilai default
-
-  // STATE BARU UNTUK WAKTU REALTIME
   late DateTime _currentTime;
   late Timer _timer;
-
-  // Data tugas disimpan sebagai STATE lokal
   late List<Map<String, dynamic>> _urgentTasks;
-
-  // VARIABEL BARU UNTUK KONTROL GETARAN
   bool _isVibrating = false;
 
-  // --- Helper untuk format tanggal/waktu manual (tanpa paket intl) ---
   final List<String> _days = [
     'Senin',
     'Selasa',
@@ -161,126 +63,80 @@ class _HomeViewState extends State<HomeView> {
     'November',
     'Desember',
   ];
-  // -------------------------------------------------------------------
-
-  // =========================================================================
-  // 🚀 LOGIKA VIBRASI & WAKTU
-  // =========================================================================
 
   @override
   void initState() {
     super.initState();
-    // Inisialisasi data tugas dari data mentah (Membuat Salinan)
     _urgentTasks = initialUrgentTasks
         .map((task) => Map<String, dynamic>.from(task))
         .toList();
-
-    // INISIALISASI WAKTU DAN TIMER
     _currentTime = DateTime.now();
     _timer = Timer.periodic(const Duration(seconds: 1), _updateTime);
 
-    // Memanggil _triggerHapticFeedback setelah frame pertama selesai dibangun
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _triggerHapticFeedback();
     });
   }
 
-  // FUNGSI UNTUK MENGUPDATE WAKTU SETIAP DETIK
   void _updateTime(Timer timer) {
-    if (mounted) {
-      setState(() {
-        _currentTime = DateTime.now();
-      });
-    }
+    if (mounted) setState(() => _currentTime = DateTime.now());
   }
 
   @override
   void dispose() {
-    // PENTING: Hentikan timer saat widget di-dispose
     _timer.cancel();
     super.dispose();
   }
 
-  // Fungsi untuk menghentikan getaran dan menandai tugas selesai (dipanggil saat klik OK)
   void _stopHapticFeedback() {
     if (_isVibrating) {
       if (mounted) {
         setState(() {
           _isVibrating = false;
-          // Tandai tugas pertama (yang memicu getaran) sebagai selesai
-          if (_urgentTasks.isNotEmpty) {
-            _urgentTasks[0]['isCompleted'] = true;
-          }
+          if (_urgentTasks.isNotEmpty) _urgentTasks[0]['isCompleted'] = true;
         });
       }
-      print('DEBUG: Getaran Dihentikan oleh Pengguna (Tombol OK/Selesai)');
-      // Memberi getaran balik (feedback) saat tombol OK diklik
       HapticFeedback.vibrate();
     }
   }
 
-  // Logika Getaran...
   void _triggerHapticFeedback() async {
-    // Cek apakah tugas sudah selesai atau daftar kosong
     if (_urgentTasks.isEmpty || (_urgentTasks[0]['isCompleted'] as bool))
       return;
-
     final Map<String, dynamic> currentTask = _urgentTasks[0];
     final Color taskColor = currentTask['color'] as Color;
 
     await Future.delayed(const Duration(milliseconds: 100));
-
-    // Aktifkan status getaran
-    if (mounted) {
-      setState(() {
-        _isVibrating = true;
-      });
-    }
+    if (mounted) setState(() => _isVibrating = true);
 
     int repeatCount = 0;
-
-    // Jeda sangat kecil (50ms) untuk mencegah overload, tapi tetap terasa padat
     const Duration minimalDelay = Duration(milliseconds: 50);
     const int veryLongDurationInRepeats = 50000;
 
-    // --- LOGIKA UTAMA GETARAN ---
     if (taskColor == Colors.red.shade700) {
       repeatCount = veryLongDurationInRepeats;
-      print(
-        'DEBUG: Memulai getaran berulang (Merah - SIMULASI PANJANG - ${repeatCount}x Heavy Impact)',
-      );
       for (int i = 0; i < repeatCount && _isVibrating; i++) {
         try {
           await HapticFeedback.heavyImpact();
         } catch (e) {
           HapticFeedback.vibrate();
         }
-        if (_isVibrating) {
-          await Future.delayed(minimalDelay);
-        }
+        if (_isVibrating) await Future.delayed(minimalDelay);
       }
     } else if (taskColor == Colors.amber.shade700) {
       repeatCount = veryLongDurationInRepeats ~/ 2;
-      print(
-        'DEBUG: Memulai getaran berulang (Kuning - SIMULASI PANJANG - ${repeatCount}x Medium Impact)',
-      );
       for (int i = 0; i < repeatCount && _isVibrating; i++) {
         try {
           await HapticFeedback.mediumImpact();
         } catch (e) {
           HapticFeedback.vibrate();
         }
-
-        if (_isVibrating) {
-          await Future.delayed(minimalDelay);
-        }
+        if (_isVibrating) await Future.delayed(minimalDelay);
       }
     } else {
       HapticFeedback.lightImpact();
-      print('DEBUG: Light Impact Triggered');
     }
 
-    // Matikan status getaran setelah loop selesai
     if (mounted) {
       setState(() {
         _isVibrating = false;
@@ -290,36 +146,23 @@ class _HomeViewState extends State<HomeView> {
         }
       });
     }
-    print('DEBUG: Simulasi Getaran Selesai');
   }
-
-  // =========================================================================
-  // WIDGET BARU: KARTU JAM/WAKTU
-  // =========================================================================
 
   Widget _buildCurrentTimeCard() {
     final now = _currentTime;
-
-    // Format Waktu Jam dan Menit: HH:MM
     final timeHoursMinutes =
         '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
-
-    // Format Detik: SS
     final timeSeconds = now.second.toString().padLeft(2, '0');
-
-    // Format Tanggal: NamaHari, DD NamaBulan YYYY
     final dayName = _days[now.weekday - 1];
     final monthName = _months[now.month - 1];
     final dateString = '$dayName, ${now.day} $monthName ${now.year}';
-
     const Color blackColor = Colors.black;
 
     return Container(
-      // 🔥 PERUBAHAN DI SINI: bottom margin menjadi 5
       margin: const EdgeInsets.only(left: 20, right: 20, top: 10, bottom: 5),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white, // Latar belakang putih
+        color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.grey.shade200, width: 1),
         boxShadow: [
@@ -355,14 +198,13 @@ class _HomeViewState extends State<HomeView> {
                 textBaseline: TextBaseline.alphabetic,
                 children: [
                   Text(
-                    timeHoursMinutes, // Jam dan Menit (Font Besar)
+                    timeHoursMinutes,
                     style: const TextStyle(
                       fontSize: 34,
                       fontWeight: FontWeight.w900,
                       color: blackColor,
                     ),
                   ),
-                  // Pemisah Titik Dua untuk Detik
                   const Text(
                     ':',
                     style: TextStyle(
@@ -371,7 +213,6 @@ class _HomeViewState extends State<HomeView> {
                       color: blackColor,
                     ),
                   ),
-                  // TAMPILAN DETIK (Font Besar, menyatu dengan jam/menit)
                   Text(
                     timeSeconds,
                     style: const TextStyle(
@@ -397,10 +238,6 @@ class _HomeViewState extends State<HomeView> {
     );
   }
 
-  // =========================================================================
-  // WIDGET LAIN (Dipertahankan)
-  // =========================================================================
-
   Widget _buildHeader() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
@@ -425,30 +262,43 @@ class _HomeViewState extends State<HomeView> {
               ),
             ],
           ),
-          // Event Live Button
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: primaryTeal.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: primaryTeal),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.circle, color: primaryTeal, size: 8),
-                const SizedBox(width: 6),
-                Text(
-                  'Event Live',
-                  style: TextStyle(
-                    color: primaryTeal,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
+          Obx(() {
+            bool hasLiveEvent =
+                controller.akadRundownList.any((e) => e['status'] == 'Live') ||
+                controller.resepsiRundownList.any((e) => e['status'] == 'Live');
+
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: hasLiveEvent
+                    ? primaryTeal.withOpacity(0.1)
+                    : Colors.grey.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: hasLiveEvent ? primaryTeal : Colors.grey.shade300,
                 ),
-              ],
-            ),
-          ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.circle,
+                    color: hasLiveEvent ? primaryTeal : Colors.grey,
+                    size: 8,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Event Live',
+                    style: TextStyle(
+                      color: hasLiveEvent ? primaryTeal : Colors.grey,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
         ],
       ),
     );
@@ -456,7 +306,7 @@ class _HomeViewState extends State<HomeView> {
 
   Widget _buildOkButton() {
     return GestureDetector(
-      onTap: _stopHapticFeedback, // Panggil fungsi stop yang menandai selesai
+      onTap: _stopHapticFeedback,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
         decoration: BoxDecoration(
@@ -478,7 +328,6 @@ class _HomeViewState extends State<HomeView> {
   Widget _buildTaskItem(Map<String, dynamic> task) {
     final Color color = task['color'] as Color;
     final bool isCompleted = task['isCompleted'] as bool;
-
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -540,14 +389,9 @@ class _HomeViewState extends State<HomeView> {
   }
 
   Widget _buildUrgentTaskCard() {
-    if (_urgentTasks.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
+    if (_urgentTasks.isEmpty) return const SizedBox.shrink();
     final Map<String, dynamic> currentTask = _urgentTasks[0];
-
     return Container(
-      // 🔥 PERUBAHAN DI SINI: top dan bottom margin menjadi 5
       margin: const EdgeInsets.only(left: 20, right: 20, top: 5, bottom: 5),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -598,40 +442,33 @@ class _HomeViewState extends State<HomeView> {
   }
 
   Widget _buildSelectionChip(String label, String value) {
-    final bool isSelected = _selectedRundownType == value;
-    final Color selectedColor = primaryTeal;
-
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedRundownType = value;
-        });
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-        decoration: BoxDecoration(
-          color: isSelected ? selectedColor : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: isSelected ? Colors.white : Colors.black,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            fontSize: 14,
+    return Obx(() {
+      final bool isSelected = controller.selectedRundownType.value == value;
+      return GestureDetector(
+        onTap: () => controller.changeRundownType(value),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          decoration: BoxDecoration(
+            color: isSelected ? primaryTeal : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: isSelected ? Colors.white : Colors.black,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              fontSize: 14,
+            ),
           ),
         ),
-      ),
-    );
+      );
+    });
   }
 
   Widget _buildRundownItem(Map<String, dynamic> item, int index) {
-    final List<Map<String, dynamic>> currentList =
-        _selectedRundownType == 'pagi' ? akadRundown : resepsiRundown;
-
-    final bool isLiveEvent = index == 0 && _selectedRundownType != 'malam';
+    final bool isLiveEvent = (item['status'] ?? '') == 'Live';
 
     Color timeColor = isLiveEvent ? primaryTeal : Colors.black;
     const Color activityTitleColor = Colors.black;
@@ -654,7 +491,7 @@ class _HomeViewState extends State<HomeView> {
                 ),
               ),
               const SizedBox(height: 4),
-              if (isLiveEvent && currentList.isNotEmpty)
+              if (isLiveEvent)
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 6,
@@ -709,6 +546,9 @@ class _HomeViewState extends State<HomeView> {
                       color: iconAndDetailColor,
                     ),
                     const SizedBox(width: 8),
+                    // ============================================
+                    // [PERBAIKAN] Bagian Deskripsi Agar Tidak Terpotong
+                    // ============================================
                     Expanded(
                       child: Text(
                         item['detail'] as String,
@@ -716,8 +556,10 @@ class _HomeViewState extends State<HomeView> {
                           fontSize: 13,
                           color: iconAndDetailColor,
                         ),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
+                        overflow: TextOverflow
+                            .visible, // Biarkan terlihat semua (wrap)
+                        // atau gunakan marquee jika pakai package
+                        maxLines: 2, // Batasi 2 baris agar rapi
                       ),
                     ),
                   ],
@@ -741,7 +583,6 @@ class _HomeViewState extends State<HomeView> {
         child: rowContent,
       );
     }
-
     return Padding(
       padding: const EdgeInsets.only(bottom: 20.0),
       child: rowContent,
@@ -749,11 +590,7 @@ class _HomeViewState extends State<HomeView> {
   }
 
   Widget _buildRundownSection() {
-    final List<Map<String, dynamic>> currentRundown =
-        _selectedRundownType == 'pagi' ? akadRundown : resepsiRundown;
-
     return Container(
-      // 🔥 PERUBAHAN DI SINI: top margin menjadi 5
       margin: const EdgeInsets.only(left: 20, right: 20, top: 5, bottom: 20),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -771,29 +608,60 @@ class _HomeViewState extends State<HomeView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Rundown Acara',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Rundown Acara',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.refresh, size: 20, color: Colors.grey),
+                onPressed: () => controller.fetchRundownData(),
+              ),
+            ],
           ),
           const SizedBox(height: 10),
           _buildRundownSelector(),
           const SizedBox(height: 15),
-
-          Column(
-            children: List.generate(currentRundown.length, (index) {
-              return _buildRundownItem(currentRundown[index], index);
-            }),
-          ),
+          Obx(() {
+            if (controller.isLoading.value)
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(20.0),
+                  child: CircularProgressIndicator(),
+                ),
+              );
+            final List<Map<String, dynamic>> currentRundown =
+                controller.selectedRundownType.value == 'pagi'
+                ? controller.akadRundownList
+                : controller.resepsiRundownList;
+            if (currentRundown.isEmpty)
+              return const Padding(
+                padding: EdgeInsets.all(30.0),
+                child: Center(
+                  child: Text(
+                    "Belum ada data acara.",
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+              );
+            return Column(
+              children: List.generate(
+                currentRundown.length,
+                (index) => _buildRundownItem(currentRundown[index], index),
+              ),
+            );
+          }),
         ],
       ),
     );
   }
 
-  // --- Implementasi Scaffold ---
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -809,15 +677,9 @@ class _HomeViewState extends State<HomeView> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 _buildHeader(),
-                // KARTU WAKTU REALTIME
                 _buildCurrentTimeCard(),
-
-                // KARTU TUGAS MENDESAK (Jarak di atasnya kini 5)
                 if (_urgentTasks.isNotEmpty) _buildUrgentTaskCard(),
-
-                // KARTU RUNDOWN (Jarak di atasnya kini 5)
                 _buildRundownSection(),
-
                 const SizedBox(height: 10),
               ],
             ),
